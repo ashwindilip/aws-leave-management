@@ -1,0 +1,157 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  actual-leave-ashwin
+
+  Sample SAM Template for actual-leave-ashwin
+
+Globals:
+  Function:
+    Timeout: 15
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  LeaveTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ActualLeaveRequestsAshwin
+      AttributeDefinitions:
+        - AttributeName: requestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: requestId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  LeaveAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: LeaveManagementAPI
+      StageName: Prod
+      Cors: "'*'"
+
+  SubmitLeaveFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - app.ts
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.applyLeave
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LeaveTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:StartExecution
+              Resource: !Ref LeaveStateMachine
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref LeaveTable
+          SES_EMAIL: "ashwin.dilip@antstack.io"
+          STATE_MACHINE_ARN: !Ref LeaveStateMachine
+      Events:
+        ApplyLeave:
+          Type: Api
+          Properties:
+            Path: /apply-leave
+            Method: POST
+            RestApiId: !Ref LeaveAPI
+
+  SendApprovalEmailFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - app.ts
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.sendApprovalEmail
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      Policies:
+        - AmazonSESFullAccess
+      Environment:
+        Variables:
+          SES_EMAIL: "ashwin.dilip@antstack.io"
+
+  ProcessApprovalFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - app.ts
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.processApproval
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:SendTaskSuccess
+                - states:SendTaskFailure
+              Resource: "*"
+      Events:
+        ProcessApproval:
+          Type: Api
+          Properties:
+            Path: /process-approval
+            Method: GET
+            RestApiId: !Ref LeaveAPI
+
+  NotifyUserFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - app.ts
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.notifyUser
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      Policies:
+        - AmazonSESFullAccess
+      Environment:
+        Variables:
+          SES_EMAIL: "ashwin.dilip@antstack.io"
+
+  LeaveStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      DefinitionUri: step-function.asl.json
+      DefinitionSubstitutions:
+        SendApprovalEmailFunctionArn: !GetAtt SendApprovalEmailFunction.Arn
+        NotifyUserFunctionArn: !GetAtt NotifyUserFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref SendApprovalEmailFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref NotifyUserFunction
