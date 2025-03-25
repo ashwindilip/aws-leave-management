@@ -1,6 +1,6 @@
 import { DynamoDBClient, PutItemCommand, GetItemCommand } from "@aws-sdk/client-dynamodb";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
-import { SFNClient, SendTaskSuccessCommand } from "@aws-sdk/client-sfn";
+import { SFNClient, StartExecutionCommand, SendTaskSuccessCommand } from "@aws-sdk/client-sfn";
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { APIGatewayTokenAuthorizerEvent, APIGatewayAuthorizerResult } from 'aws-lambda';
 import * as jwt from 'jsonwebtoken';
@@ -10,6 +10,7 @@ const ses = new SESClient({});
 const sfn = new SFNClient({});
 const TABLE_NAME = process.env.TABLE_NAME!;
 const SES_EMAIL = process.env.SES_EMAIL!;
+const STATE_MACHINE_ARN = process.env.STATE_MACHINE_ARN!;
 
 export const authorizer = async (event: APIGatewayTokenAuthorizerEvent): Promise<APIGatewayAuthorizerResult> => {
   try {
@@ -38,7 +39,7 @@ export const authorizer = async (event: APIGatewayTokenAuthorizerEvent): Promise
         userEmail: decoded.email,
       },
     };
-
+    
     return policy;
   } catch (error) {
     console.error('Authorization error:', error);
@@ -59,22 +60,23 @@ export const authorizer = async (event: APIGatewayTokenAuthorizerEvent): Promise
   }
 };
 
-export const applyLeave = async (event: any): Promise<any> => {
+export const applyLeave = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    if (!TABLE_NAME || !SES_EMAIL) {
+    if (!TABLE_NAME || !SES_EMAIL || !STATE_MACHINE_ARN) {
       throw new Error("Missing required environment variables");
     }
-
-    const { requestId, userEmail, approverEmail, leaveDetails } = event;
-
+    
+    const userEmail = event.requestContext.authorizer?.userEmail;
     if (!userEmail) {
-      throw new Error("Unauthorized: Missing userEmail");
+      return { statusCode: 403, body: JSON.stringify({ message: "Unauthorized" }) };
     }
 
-    if (!leaveDetails || !leaveDetails.leaveType || !leaveDetails.startDate || !leaveDetails.endDate || !approverEmail) {
-      throw new Error("Missing required fields in leaveDetails or approverEmail");
+    const body = JSON.parse(event.body || "{}");
+    if (!body.leaveType || !body.startDate || !body.endDate || !body.approverEmail) {
+      return { statusCode: 400, body: JSON.stringify({ message: "Missing required fields" }) };
     }
 
+    const requestId = `LEAVE-${Date.now()}`;
     console.log("Applying leave for:", userEmail, "Request ID:", requestId);
 
     await dynamo.send(new PutItemCommand({
@@ -82,29 +84,45 @@ export const applyLeave = async (event: any): Promise<any> => {
       Item: {
         requestId: { S: requestId },
         userEmail: { S: userEmail },
-        approverEmail: { S: approverEmail },
-        leaveType: { S: leaveDetails.leaveType },
-        startDate: { S: leaveDetails.startDate },
-        endDate: { S: leaveDetails.endDate },
-        reason: { S: leaveDetails.reason || "Not provided" },
+        approverEmail: { S: body.approverEmail },
+        leaveType: { S: body.leaveType },
+        startDate: { S: body.startDate },
+        endDate: { S: body.endDate },
+        reason: { S: body.reason || "Not provided" },
         status: { S: "PENDING" }
       }
     }));
 
-   
-    return {
+    const apiBaseUrl = `https://${event.requestContext.domainName}/${event.requestContext.stage}`;
+
+    const input = {
       requestId,
       userEmail,
-      approverEmail,
-      leaveDetails
+      approverEmail: body.approverEmail,
+      leaveDetails: {
+        leaveType: body.leaveType,
+        startDate: body.startDate,
+        endDate: body.endDate,
+        reason: body.reason || "Not provided"
+      },
+      apiBaseUrl
+    };
+
+    await sfn.send(new StartExecutionCommand({
+      stateMachineArn: STATE_MACHINE_ARN,
+      input: JSON.stringify(input)
+    }));
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: "Leave applied", requestId })
     };
   } catch (error) {
     console.error("Error in applyLeave:", error);
-    throw error; 
+    return { statusCode: 500, body: JSON.stringify({ message: "Internal server error" }) };
   }
 };
 
-// Remaining functions (sendApprovalEmail, processApproval, notifyUser) remain unchanged
 export const sendApprovalEmail = async (event: any): Promise<void> => {
     try {
       const { requestId, userEmail, approverEmail, leaveDetails, taskToken, apiBaseUrl } = event;

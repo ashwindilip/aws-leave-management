@@ -14,12 +14,13 @@ lint = true
 
 [default.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
+parameter_overrides = "JWTSecret=\"ashwin-leave-key\""
 confirm_changeset = true
 resolve_s3 = true
-s3_prefix = "final-leave-ashwin"
+s3_prefix = "assignment-leave-ashwin"
 region = "us-east-1"
 image_repositories = []
-stack_name = "final-leave-ashwin"
+stack_name = "assignment-leave-ashwin"
 
 [default.package.parameters]
 resolve_s3 = true

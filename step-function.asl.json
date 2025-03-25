@@ -1,27 +1,12 @@
 {
-  "Comment": "Leave Management Workflow",
-  "StartAt": "ApplyLeave",
+  "Comment": "Leave Request Approval Workflow",
+  "StartAt": "SendApprovalEmail",
   "States": {
-    "ApplyLeave": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Parameters": {
-        "FunctionName": "${ApplyLeaveFunctionArn}",
-        "Payload": {
-          "requestId.$": "$.requestId",
-          "userEmail.$": "$.userEmail",
-          "approverEmail.$": "$.approverEmail",
-          "leaveDetails.$": "$.leaveDetails"
-        }
-      },
-      "ResultPath": "$.applyLeaveResult",
-      "Next": "SendApprovalEmail"
-    },
     "SendApprovalEmail": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
       "Parameters": {
-        "FunctionName": "${SendApprovalEmailFunctionArn}",
+        "FunctionName": "${AshwinLeaveSendApprovalEmailFunctionArn}",
         "Payload": {
           "requestId.$": "$.requestId",
           "userEmail.$": "$.userEmail",
@@ -53,7 +38,7 @@
     },
     "NotifyUser": {
       "Type": "Task",
-      "Resource": "${NotifyUserFunctionArn}",
+      "Resource": "${AshwinLeaveNotifyUserFunctionArn}",
       "Parameters": {
         "requestId.$": "$.requestId",
         "userEmail.$": "$.userEmail",

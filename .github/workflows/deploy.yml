@@ -36,6 +36,6 @@ jobs:
           sam deploy \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --stack-name leave-management-stack \
+            --stack-name assignment-leave-ashwin \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --region us-east-1

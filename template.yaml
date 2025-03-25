@@ -1,25 +1,28 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Leave Management System with Step Functions, Lambda, API Gateway, SES, and DynamoDB
+Description: >
+  actual-leave-ashwin
+
+  Sample SAM Template for actual-leave-ashwin
+
+Parameters:
+  JWTSecret:
+    Type: String
+    NoEcho: True
+    Description: JWT Secret for Leave Management API
+    Default: "ashwin-leave-key"
 
 Globals:
   Function:
-    Timeout: 30
-    Runtime: nodejs22.x
-    MemorySize: 128
-    Handler: app.handler
-    CodeUri: hello-world/
-    Environment:
-      Variables:
-        TABLE_NAME: !Ref LeaveRequestsTable
-        SES_EMAIL: "ashwin.dilip@antstack.io"
-        JWT_SECRET: "your-jwt-secret" # Placeholder; override via samconfig.toml
+    Timeout: 15
+    LoggingConfig:
+      LogFormat: JSON
 
 Resources:
-  LeaveRequestsTable:
+  AshwinLeaveTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: AshwinLeaveRequestsTable
+      TableName: ActualLeaveRequestsAshwin
       AttributeDefinitions:
         - AttributeName: requestId
           AttributeType: S
@@ -28,13 +31,82 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
-  ApplyLeaveFunction:
-    Type: AWS::Serverless::Function
+  AshwinLeaveAPI:
+    Type: AWS::Serverless::Api
     Properties:
+      Name: LeaveManagementAPI
+      StageName: Prod
+      Cors: "'*'"
+      Auth:
+        DefaultAuthorizer: AshwinLeaveAuthorizer # Set default, overridden where needed
+        Authorizers:
+          AshwinLeaveAuthorizer:
+            FunctionArn: !GetAtt AshwinLeaveAuthorizerFunction.Arn
+            Identity:
+              Header: Authorization
+              ValidationExpression: "^Bearer [-0-9a-zA-Z._]*$" # Match Bearer token format
+
+  AshwinLeaveAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - app.ts
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.authorizer
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          JWT_SECRET: !Ref JWTSecret
+
+  AshwinLeaveSubmitFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - app.ts
+    Properties:
+      CodeUri: hello-world/
       Handler: app.applyLeave
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref LeaveRequestsTable
+            TableName: !Ref AshwinLeaveTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:StartExecution
+              Resource: !Ref AshwinLeaveStateMachine
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref AshwinLeaveTable
+          SES_EMAIL: "ashwin.dilip@antstack.io"
+          STATE_MACHINE_ARN: !Ref AshwinLeaveStateMachine
+      Events:
+        ApplyLeave:
+          Type: Api
+          Properties:
+            Path: /apply-leave
+            Method: POST
+            RestApiId: !Ref AshwinLeaveAPI
+            Auth:
+              Authorizer: AshwinLeaveAuthorizer # Explicitly use authorizer
+
+  AshwinLeaveSendApprovalEmailFunction:
+    Type: AWS::Serverless::Function
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -43,27 +115,20 @@ Resources:
         Sourcemap: true
         EntryPoints:
           - app.ts
-
-  AuthorizerFunction:
-    Type: AWS::Serverless::Function
     Properties:
-      Handler: app.authorizer
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Minify: true
-        Target: es2020
-        Sourcemap: true
-        EntryPoints:
-          - app.ts
-
-  SendApprovalEmailFunction:
-    Type: AWS::Serverless::Function
-    Properties:
+      CodeUri: hello-world/
       Handler: app.sendApprovalEmail
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
       Policies:
-        - SESCrudPolicy:
-            IdentityName: "ashwin.dilip@antstack.io"
+        - AmazonSESFullAccess
+      Environment:
+        Variables:
+          SES_EMAIL: "ashwin.dilip@antstack.io"
+
+  AshwinLeaveProcessApprovalFunction:
+    Type: AWS::Serverless::Function
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -72,34 +137,31 @@ Resources:
         Sourcemap: true
         EntryPoints:
           - app.ts
-
-  ProcessApprovalFunction:
-    Type: AWS::Serverless::Function
     Properties:
+      CodeUri: hello-world/
       Handler: app.processApproval
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
       Policies:
         - Statement:
             - Effect: Allow
               Action:
                 - states:SendTaskSuccess
                 - states:SendTaskFailure
-              Resource: !Ref LeaveManagementStateMachine
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Minify: true
-        Target: es2020
-        Sourcemap: true
-        EntryPoints:
-          - app.ts
+              Resource: "*"
+      Events:
+        ProcessApproval:
+          Type: Api
+          Properties:
+            Path: /process-approval
+            Method: GET
+            RestApiId: !Ref AshwinLeaveAPI
+            Auth:
+              Authorizer: NONE # Explicitly disable authorizer
 
-  NotifyUserFunction:
+  AshwinLeaveNotifyUserFunction:
     Type: AWS::Serverless::Function
-    Properties:
-      Handler: app.notifyUser
-      Policies:
-        - SESCrudPolicy:
-            IdentityName: "ashwin.dilip@antstack.io"
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -108,104 +170,32 @@ Resources:
         Sourcemap: true
         EntryPoints:
           - app.ts
-
-  LeaveManagementApi:
-    Type: AWS::Serverless::Api
     Properties:
-      StageName: prod
-      DefinitionBody:
-        swagger: "2.0"
-        info:
-          title: Leave Management API
-        paths:
-          /apply-leave:
-            post:
-              security:
-                - Authorizer: []
-              x-amazon-apigateway-integration:
-                type: aws
-                httpMethod: POST
-                uri: !Sub arn:aws:apigateway:${AWS::Region}:states:action/StartExecution
-                credentials: !GetAtt ApiGatewayRole.Arn
-                requestTemplates:
-                  application/json: |
-                    #set($inputJson = $input.json('$'))
-                    {
-                      "input": "$util.escapeJavaScript($inputJson)",
-                      "stateMachineArn": "${LeaveManagementStateMachine}",
-                      "apiBaseUrl": "https://${LeaveManagementApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
-                    }
-                responses:
-                  default:
-                    statusCode: "200"
-          /process-approval:
-            get:
-              x-amazon-apigateway-integration:
-                type: aws_proxy
-                httpMethod: POST
-                uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProcessApprovalFunction.Arn}/invocations
-      Auth:
-        Authorizers:
-          Authorizer:
-            FunctionArn: !GetAtt AuthorizerFunction.Arn
+      CodeUri: hello-world/
+      Handler: app.notifyUser
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      Policies:
+        - AmazonSESFullAccess
+      Environment:
+        Variables:
+          SES_EMAIL: "ashwin.dilip@antstack.io"
 
-  LeaveManagementStateMachine:
+  AshwinLeaveStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
       DefinitionUri: step-function.asl.json
       DefinitionSubstitutions:
-        ApplyLeaveFunctionArn: !GetAtt ApplyLeaveFunction.Arn
-        SendApprovalEmailFunctionArn: !GetAtt SendApprovalEmailFunction.Arn
-        NotifyUserFunctionArn: !GetAtt NotifyUserFunction.Arn
-      Role: !GetAtt StateMachineRole.Arn
-
-  StateMachineRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: states.amazonaws.com
-            Action: sts:AssumeRole
+        AshwinLeaveSendApprovalEmailFunctionArn: !GetAtt AshwinLeaveSendApprovalEmailFunction.Arn
+        AshwinLeaveNotifyUserFunctionArn: !GetAtt AshwinLeaveNotifyUserFunction.Arn
       Policies:
-        - PolicyName: LambdaExecutionPolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - lambda:InvokeFunction
-                Resource:
-                  - !GetAtt ApplyLeaveFunction.Arn
-                  - !GetAtt SendApprovalEmailFunction.Arn
-                  - !GetAtt NotifyUserFunction.Arn
-
-  ApiGatewayRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: apigateway.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: StartExecutionPolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - states:StartExecution
-                Resource: !Ref LeaveManagementStateMachine
+        - LambdaInvokePolicy:
+            FunctionName: !Ref AshwinLeaveSendApprovalEmailFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref AshwinLeaveNotifyUserFunction
 
 Outputs:
-  ApiUrl:
-    Description: API Gateway endpoint URL
-    Value: !Sub "https://${LeaveManagementApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
-  StateMachineArn:
-    Description: ARN of the State Machine
-    Value: !Ref LeaveManagementStateMachine
+  AshwinLeaveAPIEndpoint:
+    Description: "API Gateway endpoint URL for Leave Management"
+    Value: !Sub "https://${AshwinLeaveAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
