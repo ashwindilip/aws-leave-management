@@ -1,56 +1,71 @@
 {
-    "Comment": "Leave Request Approval Workflow",
-    "StartAt": "SendApprovalEmail",
-    "States": {
-      "SendApprovalEmail": {
-        "Type": "Task",
-        "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
-        "Parameters": {
-          "FunctionName": "${SendApprovalEmailFunctionArn}",
-          "Payload": {
-            "requestId.$": "$.requestId",
-            "userEmail.$": "$.userEmail",
-            "approverEmail.$": "$.approverEmail",
-            "leaveDetails.$": "$.leaveDetails",
-            "taskToken.$": "$$.Task.Token",
-            "apiBaseUrl.$": "$.apiBaseUrl"
-          }
-        },
-        "ResultPath": "$.approvalResult",
-        "TimeoutSeconds": 86400,
-        "Next": "CheckApprovalStatus"
-      },
-      "CheckApprovalStatus": {
-        "Type": "Choice",
-        "Choices": [
-          {
-            "Variable": "$.approvalResult.approvalStatus",
-            "StringEquals": "APPROVED",
-            "Next": "NotifyUser"
-          },
-          {
-            "Variable": "$.approvalResult.approvalStatus",
-            "StringEquals": "REJECTED",
-            "Next": "NotifyUser"
-          }
-        ],
-        "Default": "FailState"
-      },
-      "NotifyUser": {
-        "Type": "Task",
-        "Resource": "${NotifyUserFunctionArn}",
-        "Parameters": {
+  "Comment": "Leave Management Workflow",
+  "StartAt": "ApplyLeave",
+  "States": {
+    "ApplyLeave": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ApplyLeaveFunctionArn}",
+        "Payload": {
           "requestId.$": "$.requestId",
           "userEmail.$": "$.userEmail",
           "approverEmail.$": "$.approverEmail",
-          "approvalStatus.$": "$.approvalResult.approvalStatus",
           "leaveDetails.$": "$.leaveDetails"
-        },
-        "End": true
+        }
       },
-      "FailState": {
-        "Type": "Fail",
-        "Cause": "Approval process failed or timed out"
-      }
+      "ResultPath": "$.applyLeaveResult",
+      "Next": "SendApprovalEmail"
+    },
+    "SendApprovalEmail": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${SendApprovalEmailFunctionArn}",
+        "Payload": {
+          "requestId.$": "$.requestId",
+          "userEmail.$": "$.userEmail",
+          "approverEmail.$": "$.approverEmail",
+          "leaveDetails.$": "$.leaveDetails",
+          "taskToken.$": "$$.Task.Token",
+          "apiBaseUrl.$": "$.apiBaseUrl"
+        }
+      },
+      "ResultPath": "$.approvalResult",
+      "TimeoutSeconds": 86400,
+      "Next": "CheckApprovalStatus"
+    },
+    "CheckApprovalStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.approvalResult.approvalStatus",
+          "StringEquals": "APPROVED",
+          "Next": "NotifyUser"
+        },
+        {
+          "Variable": "$.approvalResult.approvalStatus",
+          "StringEquals": "REJECTED",
+          "Next": "NotifyUser"
+        }
+      ],
+      "Default": "FailState"
+    },
+    "NotifyUser": {
+      "Type": "Task",
+      "Resource": "${NotifyUserFunctionArn}",
+      "Parameters": {
+        "requestId.$": "$.requestId",
+        "userEmail.$": "$.userEmail",
+        "approverEmail.$": "$.approverEmail",
+        "approvalStatus.$": "$.approvalResult.approvalStatus",
+        "leaveDetails.$": "$.leaveDetails"
+      },
+      "End": true
+    },
+    "FailState": {
+      "Type": "Fail",
+      "Cause": "Approval process failed or timed out"
     }
+  }
 }

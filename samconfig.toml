@@ -16,9 +16,10 @@ lint = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
-s3_prefix = "actual-leave-ashwin"
+s3_prefix = "final-leave-ashwin"
 region = "us-east-1"
 image_repositories = []
+stack_name = "final-leave-ashwin"
 
 [default.package.parameters]
 resolve_s3 = true
