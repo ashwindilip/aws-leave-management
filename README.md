@@ -1,4 +1,4 @@
-```markdown
+
 # AWS Leave Management System
 
 The AWS Leave Management System is a serverless application designed to streamline the process of applying for and approving leave requests within an organization. Leveraging the power of AWS services, this system provides a scalable, reliable, and secure solution for managing employee leave.
@@ -115,4 +115,3 @@ To change the `SES_EMAIL`, modify the `template.yaml` file before deployment. En
 ## License
 
 This project is licensed under the MIT License.
-```
