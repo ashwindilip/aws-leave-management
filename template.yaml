@@ -57,7 +57,7 @@ Resources:
         EntryPoints:
           - app.ts
     Properties:
-      CodeUri: hello-world/
+      CodeUri: lambdas/
       Handler: app.authorizer
       Runtime: nodejs22.x
       Architectures:
@@ -77,7 +77,7 @@ Resources:
         EntryPoints:
           - app.ts
     Properties:
-      CodeUri: hello-world/
+      CodeUri: lambdas/
       Handler: app.applyLeave
       Runtime: nodejs22.x
       Architectures:
@@ -116,7 +116,7 @@ Resources:
         EntryPoints:
           - app.ts
     Properties:
-      CodeUri: hello-world/
+      CodeUri: lambdas/
       Handler: app.sendApprovalEmail
       Runtime: nodejs22.x
       Architectures:
@@ -138,7 +138,7 @@ Resources:
         EntryPoints:
           - app.ts
     Properties:
-      CodeUri: hello-world/
+      CodeUri: lambdas/
       Handler: app.processApproval
       Runtime: nodejs22.x
       Architectures:
@@ -171,7 +171,7 @@ Resources:
         EntryPoints:
           - app.ts
     Properties:
-      CodeUri: hello-world/
+      CodeUri: lambdas/
       Handler: app.notifyUser
       Runtime: nodejs22.x
       Architectures:

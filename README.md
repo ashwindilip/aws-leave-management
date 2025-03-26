@@ -1,127 +1,120 @@
-# actual-leave-ashwin
+# AWS Leave Management System
 
-This project contains source code and supporting files for a serverless application that you can deploy with the SAM CLI. It includes the following files and folders.
+The AWS Leave Management System is a serverless application designed to streamline the process of applying for and approving leave requests within an organization. Leveraging the power of AWS services, this system provides a scalable, reliable, and secure solution for managing employee leave.
 
-- hello-world - Code for the application's Lambda function written in TypeScript.
-- events - Invocation events that you can use to invoke the function.
-- hello-world/tests - Unit tests for the application code. 
-- template.yaml - A template that defines the application's AWS resources.
+## Features
 
-The application uses several AWS resources, including Lambda functions and an API Gateway API. These resources are defined in the `template.yaml` file in this project. You can update the template to add AWS resources through the same deployment process that updates your application code.
+- **Secure Authentication**: Uses JWT tokens to ensure only authorized users can submit leave requests.
+- **RESTful API**: Allows easy leave application submission through a simple HTTP endpoint.
+- **Automated Workflow**: Implements an approval process with email notifications powered by AWS Step Functions.
+- **Persistent Storage**: Stores leave requests securely in Amazon DynamoDB.
+- **Email Integration**: Sends notifications and approval requests via Amazon SES.
+- **Scalable Design**: Built with serverless AWS components for reliability and scalability.
 
-If you prefer to use an integrated development environment (IDE) to build and test your application, you can use the AWS Toolkit.  
-The AWS Toolkit is an open source plug-in for popular IDEs that uses the SAM CLI to build and deploy serverless applications on AWS. The AWS Toolkit also adds a simplified step-through debugging experience for Lambda function code. See the following links to get started.
+## Architecture
 
-* [CLion](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [GoLand](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [IntelliJ](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [WebStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [Rider](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PhpStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PyCharm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [RubyMine](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [DataGrip](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [VS Code](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/welcome.html)
-* [Visual Studio](https://docs.aws.amazon.com/toolkit-for-visual-studio/latest/user-guide/welcome.html)
+The system follows a microservices architecture, with each component serving a distinct purpose:
 
-## Deploy the sample application
+- **API Gateway**: Acts as the entry point, handling incoming HTTP requests and routing them to appropriate Lambda functions.
+- **Lambda Functions**:
+  - `authorizer`: Validates JWT tokens to authenticate users.
+  - `applyLeave`: Processes leave applications, stores them in DynamoDB, and triggers the approval workflow.
+  - `sendApproval`: Sends an email to the approver with links to approve or reject the request.
+  - `processApproval`: Updates the workflow based on the approver’s decision.
+  - `notifyUser`: Emails the user with the final decision.
+- **DynamoDB**: Provides persistent storage for leave request data.
+- **SES (Simple Email Service)**: Manages email communications for approvals and notifications.
+- **Step Functions**: Orchestrates the approval workflow, ensuring each step executes in sequence.
 
-The Serverless Application Model Command Line Interface (SAM CLI) is an extension of the AWS CLI that adds functionality for building and testing Lambda applications. It uses Docker to run your functions in an Amazon Linux environment that matches Lambda. It can also emulate your application's build environment and API.
+### Workflow
 
-To use the SAM CLI, you need the following tools.
+1. A user submits a leave request via a POST request to the API Gateway.
+2. The `authorizer` Lambda verifies the JWT token.
+3. If authenticated, the `applyLeave` Lambda stores the request in DynamoDB and starts a Step Function execution.
+4. The Step Function triggers the `sendApproval` Lambda, which emails the approver with approval/rejection links.
+5. The approver clicks a link, invoking the `processApproval` Lambda to update the workflow.
+6. The Step Function then calls the `notifyUser` Lambda to email the user with the outcome.
 
-* SAM CLI - [Install the SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
-* Node.js - [Install Node.js 22](https://nodejs.org/en/), including the NPM package management tool.
-* Docker - [Install Docker community edition](https://hub.docker.com/search/?type=edition&offering=community)
+## Prerequisites
 
-To build and deploy your application for the first time, run the following in your shell:
+Before setting up the project, ensure you have the following:
 
-```bash
-sam build
-sam deploy --guided
-```
+- An AWS account with permissions to create resources (e.g., Lambda, API Gateway, DynamoDB, SES, Step Functions).
+- [SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html) installed for deployment.
+- [Node.js](https://nodejs.org/) installed (optional, for local Lambda testing).
+- A verified email address in Amazon SES for sending emails (set in `template.yaml` or configured separately).
 
-The first command will build the source of your application. The second command will package and deploy your application to AWS, with a series of prompts:
+## Installation
 
-* **Stack Name**: The name of the stack to deploy to CloudFormation. This should be unique to your account and region, and a good starting point would be something matching your project name.
-* **AWS Region**: The AWS region you want to deploy your app to.
-* **Confirm changes before deploy**: If set to yes, any change sets will be shown to you before execution for manual review. If set to no, the AWS SAM CLI will automatically deploy application changes.
-* **Allow SAM CLI IAM role creation**: Many AWS SAM templates, including this example, create AWS IAM roles required for the AWS Lambda function(s) included to access AWS services. By default, these are scoped down to minimum required permissions. To deploy an AWS CloudFormation stack which creates or modifies IAM roles, the `CAPABILITY_IAM` value for `capabilities` must be provided. If permission isn't provided through this prompt, to deploy this example you must explicitly pass `--capabilities CAPABILITY_IAM` to the `sam deploy` command.
-* **Save arguments to samconfig.toml**: If set to yes, your choices will be saved to a configuration file inside the project, so that in the future you can just re-run `sam deploy` without parameters to deploy changes to your application.
+Follow these steps to deploy the application:
 
-You can find your API Gateway Endpoint URL in the output values displayed after deployment.
+1. **Clone the Repository**:
 
-## Use the SAM CLI to build and test locally
+   ```bash
+   git clone https://github.com/ashwindilip/aws-leave-management.git
+   ```
 
-Build your application with the `sam build` command.
+2. **Navigate to the Project Directory**:
 
-```bash
-actual-leave-ashwin$ sam build
-```
+   ```bash
+   cd aws-leave-management
+   ```
 
-The SAM CLI installs dependencies defined in `hello-world/package.json`, compiles TypeScript with esbuild, creates a deployment package, and saves it in the `.aws-sam/build` folder.
+3. **Install Dependencies**:
 
-Test a single function by invoking it directly with a test event. An event is a JSON document that represents the input that the function receives from the event source. Test events are included in the `events` folder in this project.
+   ```bash
+   npm install
+   ```
 
-Run functions locally and invoke them with the `sam local invoke` command.
+   This installs the required Node.js packages specified in `package.json`.
 
-```bash
-actual-leave-ashwin$ sam local invoke HelloWorldFunction --event events/event.json
-```
+4. **Deploy the Application**:
+   ```bash
+   sam deploy
+   ```
+   After deployment, note the API Gateway endpoint URL from the SAM output for interacting with the system.
 
-The SAM CLI can also emulate your application's API. Use the `sam local start-api` to run the API locally on port 3000.
+## Usage
 
-```bash
-actual-leave-ashwin$ sam local start-api
-actual-leave-ashwin$ curl http://localhost:3000/
-```
+### Applying for Leave
 
-The SAM CLI reads the application template to determine the API's routes and the functions that they invoke. The `Events` property on each function's definition includes the route and method for each path.
-
-```yaml
-      Events:
-        HelloWorld:
-          Type: Api
-          Properties:
-            Path: /hello
-            Method: get
-```
-
-## Add a resource to your application
-The application template uses AWS Serverless Application Model (AWS SAM) to define application resources. AWS SAM is an extension of AWS CloudFormation with a simpler syntax for configuring common serverless application resources such as functions, triggers, and APIs. For resources not included in [the SAM specification](https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md), you can use standard [AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html) resource types.
-
-## Fetch, tail, and filter Lambda function logs
-
-To simplify troubleshooting, SAM CLI has a command called `sam logs`. `sam logs` lets you fetch logs generated by your deployed Lambda function from the command line. In addition to printing the logs on the terminal, this command has several nifty features to help you quickly find the bug.
-
-`NOTE`: This command works for all AWS Lambda functions; not just the ones you deploy using SAM.
+To submit a leave request, send a POST request to the `/apply-leave` endpoint with a valid JWT token and the required fields:
 
 ```bash
-actual-leave-ashwin$ sam logs -n HelloWorldFunction --stack-name actual-leave-ashwin --tail
+curl -X POST https://your-api-id.execute-api.your-region.amazonaws.com/Prod/apply-leave \
+-H "Authorization: Bearer your-jwt-token" \
+-H "Content-Type: application/json" \
+-d '{
+  "leaveType": "Vacation",
+  "startDate": "2023-07-01",
+  "endDate": "2023-07-05",
+  "approverEmail": "approver@example.com",
+  "reason": "Family vacation"
+}'
 ```
 
-You can find more information and examples about filtering Lambda function logs in the [SAM CLI Documentation](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-logging.html).
+### Approval Process
 
-## Unit tests
+1. The approver receives an email with links to approve or reject the request.
+2. Clicking a link updates the request status, and the user is notified of the outcome via email.
 
-Tests are defined in the `hello-world/tests` folder in this project. Use NPM to install the [Jest test framework](https://jestjs.io/) and run unit tests.
+## Configuration
 
-```bash
-actual-leave-ashwin$ cd hello-world
-hello-world$ npm install
-hello-world$ npm run test
-```
+The application uses the following environment variables:
 
-## Cleanup
+- **`JWT_SECRET`**: Secret key for JWT verification (set using `parameter_overrides` in `samconfig.toml`).
+- **`SES_EMAIL`**: Sender email address for SES (defined in `template.yaml`, e.g., `ashwin.dilip@antstack.io`—update if needed).
+- **`TABLE_NAME`**: DynamoDB table name (auto-set by SAM).
+- **`STATE_MACHINE_ARN`**: Step Function ARN (auto-set by SAM).
 
-To delete the sample application that you created, use the AWS CLI. Assuming you used your project name for the stack name, you can run the following:
+To change the `SES_EMAIL`, modify the `template.yaml` file before deployment. Ensure the email is verified in SES.
 
-```bash
-sam delete --stack-name actual-leave-ashwin
-```
+## Monitoring and Debugging
 
-## Resources
+- **Logs**: View Lambda function logs in [Amazon CloudWatch](https://aws.amazon.com/cloudwatch/).
+- **Workflow Tracking**: Monitor Step Function executions in the [AWS Step Functions console](https://aws.amazon.com/step-functions/).
+- Ensure your AWS IAM role has permissions to access these services.
 
-See the [AWS SAM developer guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/what-is-sam.html) for an introduction to SAM specification, the SAM CLI, and serverless application concepts.
+## License
 
-Next, you can use AWS Serverless Application Repository to deploy ready to use Apps that go beyond hello world samples and learn how authors developed their applications: [AWS Serverless Application Repository main page](https://aws.amazon.com/serverless/serverlessrepo/)
+This project is licensed under the MIT License.
