@@ -16,7 +16,7 @@ import * as jwt from 'jsonwebtoken';
 import { jest, describe, test, expect, beforeEach } from '@jest/globals';
 
 // Mock AWS SDK clients
-const ddbMock = mockClient(DynamoDBClient);
+const ddbMock = mockClient(DynamoDBClient as any);
 const sesMock = mockClient(SESClient);
 const sfnMock = mockClient(SFNClient);
 
